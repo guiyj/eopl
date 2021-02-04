@@ -82,7 +82,7 @@
             (val2 (value-of exp2 env)))
         (let ((num1 (expval->num val1))
               (num2 (expval->num val2)))
-          (- num1 num2))))
+          (num-val (- num1 num2)))))
     (zero?-exp (exp1)
       (let ((val1 (value-of exp1 env)))
         (let ((num1 (expval->num val1)))

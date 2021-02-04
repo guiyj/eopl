@@ -2,16 +2,9 @@
 (load "../libs/sllgen.scm")
 (load "../libs/define-datatype.scm")
 
-(load "../ch02/env-proc.scm")
-
-;;; key concepts of 3.3
-; lexical scope rule
-; a procedure consists of 3 parts: the bound var,
-;                                  the body,
-;                                  the environment
-; closures are self contained: they contain everything a procedure needs in order
-;                              to be appled
-
+;;; key concepts of 3.4
+; to add recursion, 1: extend-env-rec
+;                   2: take care of apply-env
 
 ;;; grammar
 (define the-lexical-spec
@@ -35,6 +28,9 @@
       ("let" identifier "=" expression "in" expression) let-exp)
     (expression
       ("proc" "(" identifier ")" expression) proc-exp)
+    ; add letrec
+    (expression
+      ("letrec" identifier "(" identifier ")" "=" expression "in" expression) letrec-exp)
     (expression
       ("(" expression expression ")") call-exp)))
 
@@ -50,16 +46,37 @@
 (define just-scan
   (sllgen:make-string-scanner the-lexical-spec the-grammar))
 
+;;; datatype environment for extend-env-rec
+(define-datatype environment environment?
+  (empty-env)
+  (extend-env
+    (var symbol?)
+    (val expval?)
+    (env environment?))
+  (extend-env-rec
+    (p-name symbol?)
+    (b-var symbol?)
+    (body expression?)
+    (env environment?)))
+
+(define (apply-env env search-var)
+  (cases environment env
+    (empty-env ()
+      (eopl:error 'apply-env "No binding for ~s" var))
+    (extend-env (saved-var saved-val saved-env)
+      (if (eqv? saved-var search-var)
+        saved-val
+        (apply-env saved-env search-var)))
+    (extend-env-rec (p-name b-var p-body saved-env)
+      (if (eqv? p-name search-var)
+        (proc-val (procedure b-var p-body env))
+        (apply-env saved-env search-var)))))
+
 ;;; expval
 (define-datatype expval expval?
   (num-val (num number?))
   (bool-val (bool boolean?))
   (proc-val (proc proc?)))
-
-
-; a temporary solution
-(define (environment? env)
-  (procedure? env))
 
 (define-datatype proc proc?
   (procedure
@@ -86,15 +103,9 @@
   (eopl:error 'expval-extractors "Looking for a ~s, found ~s" who val))
 
 ;;; value-of
-(define (init-env)
-  (extend-env 'i (num-val 1)
-    (extend-env 'v (num-val 5)
-      (extend-env 'x (num-val 10)
-        (empty-env)))))
-
 (define (value-of-program pgm)
   (cases program pgm
-    (a-program (exp1) (value-of exp1 (init-env)))))
+    (a-program (exp1) (value-of exp1 (empty-env)))))
 
 (define (apply-proc proc1 val)
   (cases proc proc1
@@ -127,6 +138,8 @@
         (value-of body (extend-env var val1 env))))
     (proc-exp (var body)
       (proc-val (procedure var body env)))
+    (letrec-exp (p-name b-var p-body letrec-body)
+      (value-of letrec-body (extend-env-rec p-name b-var p-body env)))
     (call-exp (rator rand)
       (let ((proc (expval->proc (value-of rator env)))
             (arg (value-of rand env)))
